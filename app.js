@@ -4,8 +4,8 @@ const graphqlHttp = require('express-graphql');
 const {
     buildSchema
 } = require('graphql');
-
-const events = [];
+const mongoose = require('mongoose');
+const Event = require('./model/event');
 
 const app = express();
 app.use(bodyParser.json());
@@ -43,23 +43,51 @@ app.use('/graphql', graphqlHttp({
     `),
     rootValue: {
         events: () => {
-            return events;
+            return Event
+                .find()
+                .then(events => {
+                    return events.map(e => {
+                        return {
+                            ...e._doc, date: new Date(e.date).toISOString()
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.log(err);
+                    throw err;
+                })
         },
         createEvent: (args) => {
-            const event = {
-                _id: Math.random().toString(),
+            const event = new Event({
                 title: args.eventInput.title,
                 description: args.eventInput.description,
-                price: +args.eventInput.price,
-                date: args.eventInput.date
-            }
+                price: args.eventInput.price,
+                date: new Date(args.eventInput.date)
+            });
 
-            events.push(event)
-            return event;
+            return event
+                .save()
+                .then(result => {
+                    console.log(result);
+                    return {
+                        ...result._doc
+                    };
+                })
+                .catch(err => {
+                    console.log(err)
+                    throw err;
+                });
         }
     },
     graphiql: true
 }));
 
-app.listen(3000,
-    () => console.log('server is listening at http://localhost:3000'))
+mongoose
+    .connect(`mongodb://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@localhost:27017/${process.env.MONGO_DB}?authSource=admin`, {
+        useNewUrlParser: true
+    })
+    .then(() => {
+        app.listen(3000,
+            () => console.log('server is listening at http://localhost:3000'))
+    })
+    .catch(error => console.log(error));
